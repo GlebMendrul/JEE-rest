@@ -1,24 +1,36 @@
-package app;
+package server.api;
+
+import server.model.Stock;
+import server.service.StockService;
 
 import javax.ws.rs.*;
 import javax.ws.rs.core.Response;
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
+
+import static java.util.Objects.requireNonNull;
+import static org.apache.commons.lang3.math.NumberUtils.createBigDecimal;
+import static org.apache.commons.lang3.math.NumberUtils.isDigits;
 
 @Path("/stock")
 public class StockResource {
+
+    private static final String NOT_FOUND_SYMBOL = "NOT FOUND";
+    private static final String NOT_FOUND_COUNTRY = "--";
+    private static final String NOT_FOUND_CURRENCY = "--";
 
     @GET
     @Path("{symbol}")
     @Produces({"application/xml", "application/json", "text/plain"})
     public Stock getStock(@PathParam("symbol") String symbol) {
-
-        Stock stock = StockService.getStock(symbol);
-
-        if (stock == null) {
-            return new Stock("NOT FOUND", 0.0, "--", "--");
-        }
-
-        return stock;
+        requireNonNull(symbol);
+        Optional<Stock> stock = StockService.getStock(symbol);
+        return stock.orElse(Stock.builder()
+                .symbol(NOT_FOUND_SYMBOL)
+                .price(BigDecimal.ZERO)
+                .country(NOT_FOUND_COUNTRY)
+                .currency(NOT_FOUND_CURRENCY).build());
     }
 
     @GET
@@ -33,36 +45,34 @@ public class StockResource {
                              @FormParam("currency") String currency,
                              @FormParam("price") String price,
                              @FormParam("country") String country) {
-
-        if (StockService.getStock(symb) != null)
+        requireNonNull(symb);
+        if (StockService.getStock(symb).isPresent()) {
             return Response.status(Response.Status.BAD_REQUEST).
-                    entity("Stock " + symb +
-                            " already exists").type("text/plain").build();
-
-        double priceToUse;
-        try {
-            priceToUse = new Double(price);
-        } catch (NumberFormatException e) {
-            priceToUse = 0.0;
+                    entity("Stock " + symb + " already exists").
+                    type("text/plain").
+                    build();
         }
 
-        StockService.addStock(new Stock(symb, priceToUse,
-                currency, country));
-
+        BigDecimal priceToUse = isDigits(price) ? createBigDecimal(price) : BigDecimal.ZERO;
+        StockService.addStock(Stock.builder()
+                .symbol(symb)
+                .price(priceToUse)
+                .currency(currency)
+                .country(country).build());
         return Response.ok().build();
     }
 
     @PUT
     @Consumes({"application/xml", "application/json", "text/plain"})
     public Response addStock(Stock stock) {
-
-        if (StockService.getStock(stock.getSymbol()) != null)
+        requireNonNull(stock);
+        if (StockService.getStock(stock.getSymbol()).isPresent()) {
             return Response.status(Response.Status.BAD_REQUEST).
-                    entity("Stock " + stock.getSymbol() +
-                            " already exists").type("text/plain").build();
-
+                    entity("Stock " + stock.getSymbol() + " already exists").
+                    type("text/plain").
+                    build();
+        }
         StockService.addStock(stock);
-
         return Response.ok().build();
     }
 
@@ -72,14 +82,19 @@ public class StockResource {
                                 @FormParam("currency") String currency,
                                 @FormParam("price") String price,
                                 @FormParam("country") String country) {
-        Stock stock = new Stock(symb, Double.parseDouble(price), currency, country);
-        StockService.update(stock);
+        requireNonNull(symb);
+        StockService.update(Stock.builder()
+                .symbol(symb)
+                .price(createBigDecimal(price))
+                .currency(currency)
+                .country(country).build());
         return Response.ok().build();
     }
 
     @POST
     @Consumes({"application/xml", "application/json", "text/plain"})
     public Response updateStock(Stock stock) {
+        requireNonNull(stock);
         StockService.update(stock);
         return Response.ok().build();
     }
